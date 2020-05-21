@@ -1,0 +1,271 @@
+server_uri: bolt://localhost:7687/
+admin_user: neo4j
+admin_pass: test
+
+files:
+  # payers
+  - url: file:///data/projects/synthea/output/csv/payers.csv
+    compression: none
+    skip_file: false
+    cql: |
+      WITH $dict.rows as rows UNWIND rows as row
+        MERGE (p:Payer {id:row.Id})
+          SET p.name=row.NAME,
+            p.address=row.ADDRESS,
+            p.city=row.CITY,
+            p.zip=row.ZIP,
+            p.state=row.STATE_HEADQUARTERED
+
+  # encounters
+  - url: file:///data/projects/synthea/output/csv/encounters.csv
+    compression: none
+    skip_file: false
+    cql: |
+      WITH $dict.rows as rows UNWIND rows as row
+        MERGE (e:Encounter {id:row.Id})
+          SET e.code=row.CODE,
+            e.description=row.DESCRIPTION,
+            e.class=row.ENCOUNTERCLASS,
+            e.date=datetime(row.START),
+            e.baseCost=toFloat(row.BASE_ENCOUNTER_COST),
+            e.claimCost=toFloat(row.TOTAL_CLAIM_COST),
+            e.coveredAmount=toFloat(row.PAYER_COVERAGE),
+            e.isEnd=false
+        FOREACH (ignore in CASE WHEN exists(row.STOP) AND row.STOP <> '' THEN [1] ELSE [] END |
+          SET e.end=datetime(row.STOP)
+        )
+        MERGE (p:Patient {id:row.PATIENT})
+        MERGE (p)-[:HAS_ENCOUNTER]->(e)
+        FOREACH (ignore in CASE WHEN exists(row.PROVIDER) AND row.PROVIDER <> '' THEN [1] ELSE [] END |
+          MERGE (o:Organization {id: row.PROVIDER})
+          MERGE (e)-[:HAS_PROVIDER]->(o))
+        WITH e,row
+        MATCH (pa:Payer {id:row.PAYER})
+        MERGE (e)-[:HAS_PAYER]->(pa)
+
+  # providers
+  - url: file:///data/projects/synthea/output/csv/providers.csv
+    compression: none
+    skip_file: false
+    cql: |
+      WITH $dict.rows as rows UNWIND rows as row
+      MERGE (p:Provider {id: row.Id})
+      SET p.name=row.NAME,
+          p.speciality=row.SPECIALITY
+      MERGE (o:Organization {id: row.ORGANIZATION})
+      MERGE (p)-[:BELONGS_TO]->(o)
+      MERGE (a:Address {address: row.ADDRESS})
+      SET a.location = point({latitude:toFloat(row.LAT), longitude:toFloat(row.LON)})
+      MERGE (p)-[:HAS_ADDRESS]->(a)
+
+  # patients
+  - url: file:///data/projects/synthea/output/csv/patients.csv
+    compression: none
+    skip_file: false
+    cql: |
+      WITH $dict.rows as rows UNWIND rows as row
+        MERGE (p:Patient {id:row.Id})
+          SET
+            p.birthDate=datetime(row.BIRTHDATE),
+            p.deathDate=row.DEATHDATE,
+            p.firstName=row.FIRST,
+            p.lastName=row.LAST,
+            p.SSN=row.SSN,
+            p.marital=row.MARITAL,
+            p.gender=row.GENDER,
+            p.race=row.RACE,
+            p.ethnicity=row.ETHNICITY,
+            p.city=row.CITY
+        MERGE (a:Address {address: row.ADDRESS})
+        SET a.location = point({latitude:toFloat(row.LAT), longitude:toFloat(row.LON)})
+        MERGE (p)-[:HAS_ADDRESS]->(a)
+
+  # payer transitions
+  - url: file:///data/projects/synthea/output/csv/payer_transitions.csv
+    compression: none
+    skip_file: false:
+    cql: |
+      WITH $dict.rows as rows UNWIND rows as row
+      MATCH (p:Patient {id:row.PATIENT})
+      MATCH (payer:Payer {id:row.PAYER})
+      CREATE (p)-[s:INSURANCE_START]->(payer)
+      SET s.year=toInteger(row.START_YEAR)
+      CREATE (p)-[e:INSURANCE_END]->(payer)
+      SET e.year=toInteger(row.END_YEAR)
+
+  # allergies
+  - url: file:///data/projects/synthea/output/csv/allergies.csv
+    compression: none
+    skip_file: false
+    cql: |
+      WITH $dict.rows as rows UNWIND rows as row
+          MATCH (p:Patient {id:row.PATIENT})
+          MERGE (a:Allergy {code:row.CODE})
+          SET a.description=row.DESCRIPTION
+          MERGE (as:Encounter {id:row.ENCOUNTER, isEnd: false})
+          ON CREATE
+            SET as.date=datetime(row.START), as.code=row.CODE
+          ON MATCH
+            SET as.code=row.CODE
+          MERGE (p)-[:HAS_ENCOUNTER]->(as)
+          MERGE (as)-[:HAS_ALLERGY]->(a)
+          WITH p,a,as,row
+          WHERE exists(row.STOP) and row.STOP <> ''
+          MERGE (ae:Encounter {id:row.ENCOUNTER, date:datetime(row.STOP)})
+          SET ae.code=row.CODE, ae.isEnd=true
+          MERGE (p)-[:HAS_ENCOUNTER]->(ae)
+          MERGE (ae)-[:HAS_ALLERGY]->(a)
+          MERGE (as)-[:HAS_END]->(ae)
+
+  # conditions
+  - url: file:///data/projects/synthea/output/csv/conditions.csv
+    compression: none
+    skip_file: false
+    cql: |
+      WITH $dict.rows as rows UNWIND rows as row
+        MATCH (p:Patient {id:row.PATIENT})
+        MERGE (c:Condition {code:row.CODE})
+        SET c.description=row.DESCRIPTION
+        MERGE (cs:Encounter {id:row.ENCOUNTER, isEnd: false})
+        ON CREATE
+          SET cs.date=datetime(row.START), cs.code=row.CODE
+        ON MATCH
+          SET cs.code=row.CODE
+        MERGE (p)-[:HAS_ENCOUNTER]->(cs)
+        MERGE (cs)-[:HAS_CONDITION]->(c)
+        WITH p,c,cs,row
+        WHERE exists(row.STOP) and row.STOP <> ''
+        MERGE (ce:Encounter {id:row.ENCOUNTER, date:datetime(row.STOP)})
+        SET ce.code=row.CODE, ce.isEnd=true
+        MERGE (p)-[:HAS_ENCOUNTER]->(ce)
+        MERGE (ce)-[:HAS_CONDITION]->(c)
+        MERGE (cs)-[:HAS_END]->(ce)
+
+  # medications
+  - url: file:///data/projects/synthea/output/csv/medications.csv
+    compression: none
+    skip_file: false
+    cql: |
+      WITH $dict.rows as rows UNWIND rows as row
+          MERGE (p:Patient {id:row.PATIENT})
+          MERGE (d:Drug {code:row.CODE})
+          SET d.description=row.DESCRIPTION
+          MERGE (ps:Encounter {id:row.ENCOUNTER, isEnd: false})
+          ON CREATE
+            SET ps.code=row.CODE, ps.date=datetime(row.START)
+          ON MATCH
+            SET ps.code=row.CODE
+          MERGE (p)-[:HAS_ENCOUNTER]->(ps)
+          MERGE (ps)-[:HAS_DRUG]->(d)
+          WITH p,d,ps,row
+          WHERE exists(row.STOP) and row.STOP <> ''
+          CREATE (pe:Encounter {id:row.ENCOUNTER, date:datetime(row.STOP)})
+          SET pe.code=row.CODE, pe.isEnd=true
+          MERGE (p)-[:HAS_ENCOUNTER]->(pe)
+          MERGE (pe)-[:HAS_DRUG]->(d)
+          MERGE (ps)-[:HAS_END]->(pe)
+
+  # procedures
+  - url: file:///data/projects/synthea/output/csv/procedures.csv
+    compression: none
+    skip_file: false
+    cql: |
+      WITH $dict.rows as rows UNWIND rows as row
+          MERGE (p:Patient {id:row.PATIENT})
+          MERGE (r:Procedure {code:row.CODE})
+          SET r.description=row.DESCRIPTION
+          MERGE (pe:Encounter {id:row.ENCOUNTER, isEnd: false})
+          ON CREATE
+            SET pe.date=datetime(row.START), pe.code=row.CODE
+          ON MATCH
+            SET pe.code=row.CODE
+          MERGE (p)-[:HAS_ENCOUNTER]->(pe)
+          MERGE (pe)-[:HAS_PROCEDURE]->(r)
+
+  # observations
+  - url: file:///data/projects/synthea/output/csv/observations.csv
+    compression: none
+    skip_file: false
+    cql: |
+      WITH $dict.rows as rows UNWIND rows as row
+      WITH row
+      WHERE exists(row.ENCOUNTER) and row.ENCOUNTER <> ''
+      WITH row, row.CODE as code, CASE row.TYPE WHEN 'text' THEN row.VALUE ELSE toFloat(row.VALUE) END as value
+      WITH row, apoc.map.fromPairs([[code, value]]) as attr
+      MATCH (p:Patient {id:row.PATIENT})
+      MATCH (oe:Encounter {id:row.ENCOUNTER, isEnd: false})
+      MERGE (oe) -[:HAS_OBSERVATION]-> (o:Observation )
+      SET o += attr
+
+  # care plans
+  - url: file:///data/projects/synthea/output/csv/careplans.csv
+    compression: none
+    skip_file: false
+    cql: |
+      WITH $dict.rows as rows UNWIND rows as row
+          MATCH (p:Patient {id:row.PATIENT})
+          MERGE (c:CarePlan {code:row.CODE})
+          SET c.description=row.DESCRIPTION
+          MERGE (cs:Encounter {id:row.ENCOUNTER, isEnd: false})
+          ON CREATE
+            SET cs.code=row.CODE, cs.date=datetime(row.START)
+          ON MATCH
+            SET cs.code=row.CODE
+          MERGE (p)-[:HAS_ENCOUNTER]->(cs)
+          MERGE (cs)-[:HAS_CARE_PLAN]->(c)
+          WITH p,c,cs,row
+          WHERE exists(row.STOP) and row.STOP <> ''
+          CREATE (ce:Encounter {id:row.ENCOUNTER, date:datetime(row.STOP)})
+          SET ce.code=row.CODE, ce.isEnd=true
+          MERGE (p)-[:HAS_ENCOUNTER]->(ce)
+          MERGE (ce)-[:HAS_CARE_PLAN]->(c)
+          MERGE (cs)-[:HAS_END]->(ce)
+
+  # organizations
+  - url: file:///data/projects/synthea/output/csv/organizations.csv
+    compression: none
+    skip_file: false
+    cql: |
+      WITH $dict.rows as rows UNWIND rows as row
+        MATCH (o:Organization {id:row.Id})
+          SET o.name=row.NAME
+        MERGE (a:Address {address: row.ADDRESS})
+          SET a.location = point({latitude:toFloat(row.LAT), longitude:toFloat(row.LON)})
+        MERGE (o)-[:HAS_ADDRESS]->(a)
+
+pre_ingest:
+  - CREATE INDEX ON :Encounter(id)
+  - CREATE INDEX ON :Encounter(date)
+  - CREATE INDEX ON :Encounter(isEnd)
+  - CREATE INDEX ON :Patient (id)
+  - CREATE INDEX ON :Provider (id)
+  - CREATE INDEX ON :Payer (id)
+  - CREATE INDEX ON :Organization (id)
+  - CREATE INDEX ON :Drug (code)
+  - CREATE INDEX ON :Condition (code)
+  - CREATE INDEX ON :CarePlan (id)
+  - CREATE INDEX ON :Speciality (name)
+  - CREATE INDEX ON :Allergy (code)
+  - CREATE INDEX ON :Address (address)
+  - CREATE INDEX ON :Procedure (code)
+
+post_ingest:
+  # Create NEXT relationship between encounters of a patient
+  - |
+    CALL apoc.periodic.iterate(
+    'MATCH (p:Patient) RETURN p',
+    'MATCH (p)-[:HAS_ENCOUNTER]->(e)
+    WITH e
+    ORDER BY e.date
+    WITH collect(e) AS encounters
+    WITH encounters, encounters[1..] as nextEncounters
+    UNWIND range(0,size(nextEncounters)-1,1) as index
+    WITH encounters[index] as first, nextEncounters[index] as second
+    CREATE (first)-[:NEXT]->(second)',{iterateList:false});
+  # Pre-compute patient counts for each Condition
+  - |
+    CALL apoc.periodic.iterate('MATCH (c:Condition) RETURN c',
+      'MATCH (c)<-[:HAS_CONDITION]-(:Encounter)<-[:HAS_ENCOUNTER]-(p:Patient)
+      WITH c,count(p) AS NUM
+      SET c.num=NUM', {}
+      );
