@@ -3,7 +3,7 @@
 Having obtained synthetic patient journey data from Synthea (see [here](../synthea/README.md)), you can 
 follow these steps to ingest the data to a Neo4j graph:
 
-* Prerequisites - Python 3, Pip
+* Prerequisites - Python 3, Pip, Neo4j 3.5.x, APOC plugin
 
 * Clone or download the `pyingest` project from github [here](https://github.com/mholford-neo/pyingest)
 
@@ -14,6 +14,8 @@ location of the CSV files from Synthea
 
 * From the root folder of your pyinstall checkout run: 
 `python3 src/main/ingest.py $JOURNEY_DEMO/ingest/config.yml`, where `$JOURNEY_DEMO` is the path to the root of this project.
+
+* If you get complains about missing module yaml, run the following: `pip3 install pyyaml`
 
 
 ### Neo4j configuration notes
