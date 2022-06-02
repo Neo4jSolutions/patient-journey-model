@@ -83,7 +83,7 @@ files:
   # payer transitions
   - url: file:///data/projects/synthea/output/csv/payer_transitions.csv
     compression: none
-    skip_file: false:
+    skip_file: false
     cql: |
       WITH $dict.rows as rows UNWIND rows as row
       MATCH (p:Patient {id:row.PATIENT})
