@@ -11,5 +11,6 @@ This configures Synthea to generate only csv files.
 `./run_synthea -p 1000000`
 where `p` is the number of synthetic patients you wish to generate.
 
-* Once you have generated the synthetic patients, see [here](../ingest/README.md) for details on loading the
-data into Neo4j.
+* Once you have generated the synthetic patients, see 
+    * (Newer) [here](../ingest-pyneoinstance/README.md) for details on loading the data into Neo4j.
+    * (Older) [here](../ingest/README.md) for details on loading the data into Neo4j.
