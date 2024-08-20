@@ -1,0 +1,10 @@
+database_pyingest/backups
+database_pyingest/import
+database_pyingest/neo4j
+.DS_Store
+pyingest-clone/
+.venv/
+**/__pycache__
+.vscode
+.ignore/
+import/
