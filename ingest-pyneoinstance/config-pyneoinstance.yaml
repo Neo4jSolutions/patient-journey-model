@@ -1,8 +1,8 @@
 server_uri: neo4j://localhost:7687/
 admin_user: neo4j
 admin_pass: neo4j123
-database: synthea10k2024v3
-data_directory: /Users/henrylin/dev/patient-journey-model/import/synthea10k-2024/
+database: synthea100kv3
+data_directory: /Users/henrylin/dev/patient-journey-model/import/synthea100k-2024/
 
 pre_ingest:
   - CREATE INDEX IF NOT EXISTS FOR (n:Encounter) ON (n.id)
@@ -268,11 +268,11 @@ post_ingest:
     WITH encounters, encounters[1..] as nextEncounters
     UNWIND range(0,size(nextEncounters)-1,1) as index
     WITH encounters[index] as first, nextEncounters[index] as second
-    CREATE (first)-[:NEXT]->(second)',{iterateList:false});
+    MERGE (first)-[:NEXT]->(second)',{batchSize:1000});
   # Pre-compute patient counts for each Condition
   - |
     CALL apoc.periodic.iterate('MATCH (c:Condition) RETURN c',
       'MATCH (c)<-[:HAS_CONDITION]-(:Encounter)<-[:HAS_ENCOUNTER]-(p:Patient)
       WITH c,count(p) AS NUM
-      SET c.num=NUM', {}
+      SET c.num=NUM', {batchSize:1000}
       );

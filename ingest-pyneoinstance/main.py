@@ -1,5 +1,6 @@
 import os
 import time
+import traceback
 from datetime import datetime
 
 import pandas as pd
@@ -43,7 +44,7 @@ def main():
 
     start = time.time()  # seconds
     graph = Neo4jInstance(cf["server_uri"], cf["admin_user"], cf["admin_pass"])
-    
+
     # pre ingest
     print_("Running pre_ingest queries...")
     try:
@@ -74,12 +75,20 @@ def main():
             )
             print_("   Done")
 
+    # wait before post ingest
+    POST_INGEST_WAIT = 120
+    print_(f"Sleeping for {POST_INGEST_WAIT}s before post ingest...")
+    time.sleep(POST_INGEST_WAIT)
+
     # post ingest
     print_("Running post_ingest queries...")
     try:
-        graph.execute_write_queries(database=dbname, queries=cf["post_ingest"])
+        for qry in cf["post_ingest"]:
+            print(f"\nRunning: {qry}")
+            graph.execute_write_query(qry, database=dbname)
     except Exception as e:
-        print_(e)
+        print_("ERROR")
+        traceback.print_exc()
     duration_sec = time.time() - start
     print_(f"Done in {duration_sec} s (about {int(duration_sec / 60)} min)")
 
