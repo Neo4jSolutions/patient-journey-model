@@ -1,7 +1,7 @@
 server_uri: neo4j://localhost:7687/
 admin_user: neo4j
 admin_pass: neo4j123
-database: synthea100kv3
+database: synthea100kv4
 data_directory: /Users/henrylin/dev/patient-journey-model/import/synthea100k-2024/
 
 pre_ingest:
@@ -22,34 +22,20 @@ pre_ingest:
 
 loading_queries:
   nodes:
+    
     Payers:
       # skip: true
       file: payers.csv
       query: |
         WITH $rows as rows UNWIND rows as row
-        MERGE (e:Encounter {id:row.Id})
-        SET e.code=row.CODE,
-          e.description=row.DESCRIPTION,
-          e.class=row.ENCOUNTERCLASS,
-          e.date=datetime(row.START),
-          e.baseCost=toFloat(row.BASE_ENCOUNTER_COST),
-          e.claimCost=toFloat(row.TOTAL_CLAIM_COST),
-          e.coveredAmount=toFloat(row.PAYER_COVERAGE),
-          e.isEnd=false
-        FOREACH (_ in CASE WHEN row.STOP IS NOT NULL AND row.STOP <> '' THEN [1] ELSE [] END |
-          SET e.end=datetime(row.STOP)
-        )
-        FOREACH (_ in CASE WHEN row.PROVIDER IS NOT NULL AND row.PROVIDER <> '' THEN [1] ELSE [] END |
-          MERGE (o:Organization {id: row.PROVIDER})
-          MERGE (e)-[:HAS_PROVIDER]->(o))
-        WITH e,row
-        MATCH (pa:Payer {id:row.PAYER})
-        MERGE (e)-[:HAS_PAYER]->(pa)
-        WITH e,row
-        WHERE row.PATIENT IS NOT NULL
-        MERGE (p:Patient {id:row.PATIENT})
-        MERGE (p)-[:HAS_ENCOUNTER]->(e)
-    Encounters_Patients_Organizations:
+        MERGE (p:Payer {id:row.Id})
+        SET p.name=row.NAME,
+          p.address=row.ADDRESS,
+          p.city=row.CITY,
+          p.zip=row.ZIP,
+          p.state=row.STATE_HEADQUARTERED
+    
+    Encounters:
       # skip: true
       file: encounters.csv
       query: |
@@ -74,7 +60,8 @@ loading_queries:
         WITH e,row
         MATCH (pa:Payer {id:row.PAYER})
         MERGE (e)-[:HAS_PAYER]->(pa)
-    Providers_Addresses:
+    
+    Providers:
       # skip: true
       file: providers.csv
       query: |
@@ -121,7 +108,7 @@ loading_queries:
         CREATE (p)-[e:INSURANCE_END]->(payer)
         SET e.year=toInteger(row.END_YEAR)
 
-    Allergies_Encounters:
+    Allergies:
       # skip: true
       file: allergies.csv
       query: |
