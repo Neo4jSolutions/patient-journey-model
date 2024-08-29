@@ -276,3 +276,31 @@ post_ingest:
       WITH c,count(p) AS NUM
       SET c.num=NUM', {batchSize:1000}
       );
+
+
+# post_ingest_test:
+#   # Create NEXT relationship between encounters of a patient
+  
+#   - |
+#     :auto MATCH (p:Patient)
+#     WITH p limit 100
+#     CALL {
+#         WITH p
+#         MATCH (p)-[:HAS_ENCOUNTER]->(e)
+#         WITH e
+#         ORDER BY e.date
+#         WITH collect(e) AS encounters
+#         WITH encounters, encounters[1..] as nextEncounters
+#         UNWIND range(0,size(nextEncounters)-1,1) as index
+#         WITH encounters[index] as first, nextEncounters[index] as second
+#         MERGE (first)-[:NEXT]->(second)
+#     } IN TRANSACTIONS
+#   # Pre-compute patient counts for each Condition
+#   - |
+#     MATCH (c:Condition)
+#     CALL {
+#         WITH c
+#         MATCH (c)<-[:HAS_CONDITION]-(:Encounter)<-[:HAS_ENCOUNTER]-(p:Patient)
+#         WITH c,count(p) AS NUM
+#         SET c.num=NUM
+#     } IN TRANSACTIONS
