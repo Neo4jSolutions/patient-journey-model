@@ -104,9 +104,9 @@ loading_queries:
         MATCH (p:Patient {id:row.PATIENT})
         MATCH (payer:Payer {id:row.PAYER})
         CREATE (p)-[s:INSURANCE_START]->(payer)
-        SET s.year=toInteger(row.START_YEAR)
+        SET s.year=datetime(row.START_DATE)
         CREATE (p)-[e:INSURANCE_END]->(payer)
-        SET e.year=toInteger(row.END_YEAR)
+        SET e.year=datetime(row.END_DATE)
 
     Allergies:
       # skip: true
