@@ -12,6 +12,7 @@ from pyneoinstance.fileload import load_yaml_file
 
 BATCH_SIZE = 1000
 DEFAULT_WORKERS = 1
+POST_INGEST_WAIT = 60
 
 
 def main():
@@ -75,22 +76,23 @@ def main():
             )
             print_("   Done")
 
-    # wait before post ingest
-    POST_INGEST_WAIT = 120
-    print_(f"Sleeping for {POST_INGEST_WAIT}s before post ingest...")
-    time.sleep(POST_INGEST_WAIT)
+    if "post_ingest" in cf:
+        if has_loading_queries:
+            # wait before post ingest
+            print_(f"Sleeping for {POST_INGEST_WAIT}s before post ingest...")
+            time.sleep(POST_INGEST_WAIT)
 
-    # post ingest
-    print_("Running post_ingest queries...")
-    try:
-        for qry in cf["post_ingest"]:
-            print(f"\nRunning: {qry}")
-            graph.execute_write_query(qry, database=dbname)
-    except Exception as e:
-        print_("ERROR")
-        traceback.print_exc()
-    duration_sec = time.time() - start
-    print_(f"Done in {duration_sec} s (about {int(duration_sec / 60)} min)")
+        # post ingest
+        print_("Running post_ingest queries...")
+        try:
+            for qry in cf["post_ingest"]:
+                print(f"\nRunning: {qry}")
+                graph.execute_write_query(qry, database=dbname)
+        except Exception as e:
+            print_("ERROR")
+            traceback.print_exc()
+        duration_sec = time.time() - start
+        print_(f"Done in {duration_sec} s (about {int(duration_sec / 60)} min)")
 
 
 def get_partition(data: DataFrame, batch_size: int = BATCH_SIZE) -> int:

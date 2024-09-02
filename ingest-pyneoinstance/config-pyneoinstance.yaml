@@ -1,16 +1,20 @@
 server_uri: neo4j://localhost:7687/
 admin_user: neo4j
 admin_pass: neo4j123
+
 database: synthea100v2
 data_directory: /Users/henrylin/dev/patient-journey-model/import/synthea100
-# database: synthea100kv4
-# data_directory: /Users/henrylin/dev/patient-journey-model/import/synthea100k-2024
+# database: synthea100kv6
+# data_directory: /Users/henrylin/dev/patient-journey-model/import/synthea100k
 
 # add unique constraint
 pre_ingest:
   - CREATE CONSTRAINT constraint_encounter_id IF NOT EXISTS FOR (n:Encounter) REQUIRE n.id IS UNIQUE
   - CREATE INDEX IF NOT EXISTS FOR (n:Encounter) ON (n.date)
   - CREATE INDEX IF NOT EXISTS FOR (n:Encounter) ON (n.isEnd)
+  - CREATE CONSTRAINT constraint_encounterEnd_id IF NOT EXISTS FOR (n:EncounterEnd) REQUIRE n.id IS UNIQUE
+  - CREATE INDEX IF NOT EXISTS FOR (n:EncounterEnd) ON (n.date)
+  - CREATE INDEX IF NOT EXISTS FOR (n:EncounterEnd) ON (n.isEnd)
   - CREATE CONSTRAINT constraint_Patient_id IF NOT EXISTS FOR (n:Patient) REQUIRE n.id IS UNIQUE
   - CREATE CONSTRAINT constraint_Provider_id IF NOT EXISTS FOR (n:Provider) REQUIRE n.id IS UNIQUE
   - CREATE CONSTRAINT constraint_Payer_id IF NOT EXISTS FOR (n:Payer) REQUIRE n.id IS UNIQUE
@@ -40,6 +44,7 @@ loading_queries:
     
     # create Encounter, add end date if exists, merge in patient and relate, 
     # merge in Organizations if exist and relate. relate to payer
+    # class: ["ambulatory", "emergency", "home", "hospice", "inpatient", "outpatient", "snf", "urgentcare", "virtual", "wellness"]
     Encounters:
       # skip: true
       file: encounters.csv
@@ -59,13 +64,17 @@ loading_queries:
         )
         MERGE (p:Patient {id:row.PATIENT})
         MERGE (p)-[:HAS_ENCOUNTER]->(e)
+        FOREACH (ignore in CASE WHEN row.ORGANIZATION IS NOT NULL AND row.ORGANIZATION <> '' THEN [1] ELSE [] END |
+          MERGE (o:Organization {id: row.ORGANIZATION})
+          MERGE (e)-[:HAS_ORGANIZATION]->(o))
         FOREACH (ignore in CASE WHEN row.PROVIDER IS NOT NULL AND row.PROVIDER <> '' THEN [1] ELSE [] END |
-          MERGE (o:Organization {id: row.PROVIDER})
-          MERGE (e)-[:HAS_PROVIDER]->(o))
+          MERGE (pr:Provider {id: row.PROVIDER})
+          MERGE (e)-[:HAS_PROVIDER]->(pr))
         WITH e,row
         MATCH (pa:Payer {id:row.PAYER})
         MERGE (e)-[:HAS_PAYER]->(pa)
-    
+
+    # may add providers not included in encounters.csv
     Providers:
       # skip: true
       file: providers.csv
@@ -119,19 +128,17 @@ loading_queries:
         MATCH (p:Patient {id:row.PATIENT})
         MERGE (a:Allergy {code:row.CODE})
         SET a.description=row.DESCRIPTION
-        MERGE (as:Encounter {id:row.ENCOUNTER, isEnd: false})
+        MERGE (as:Encounter {id:row.ENCOUNTER})
         ON CREATE
-          SET as.date=datetime(row.START), as.code=row.CODE
+          SET as.date=datetime(row.START), as.code=row.CODE, as.class='assertfalse'
         ON MATCH
           SET as.code=row.CODE
         MERGE (p)-[:HAS_ENCOUNTER]->(as)
         MERGE (as)-[:HAS_ALLERGY]->(a)
         WITH p,a,as,row
         WHERE row.STOP IS NOT NULL and row.STOP <> ''
-        MERGE (ae:Encounter {id:row.ENCOUNTER, date:datetime(row.STOP)})
-        SET ae.code=row.CODE, ae.isEnd=true
-        MERGE (p)-[:HAS_ENCOUNTER]->(ae)
-        MERGE (ae)-[:HAS_ALLERGY]->(a)
+        MERGE (ae:Encounter {id:row.ENCOUNTER})
+          SET ae.date=datetime(row.STOP), ae.code=row.CODE, ae.isEnd=true
         MERGE (as)-[:HAS_END]->(ae)
 
     Conditions:
@@ -142,19 +149,17 @@ loading_queries:
         MATCH (p:Patient {id:row.PATIENT})
         MERGE (c:Condition {code:row.CODE})
         SET c.description=row.DESCRIPTION
-        MERGE (cs:Encounter {id:row.ENCOUNTER, isEnd: false})
+        MERGE (cs:Encounter {id:row.ENCOUNTER})
         ON CREATE
-          SET cs.date=datetime(row.START), cs.code=row.CODE
+          SET cs.date=datetime(row.START), cs.code=row.CODE, cs.class='assertfalse'
         ON MATCH
           SET cs.code=row.CODE
         MERGE (p)-[:HAS_ENCOUNTER]->(cs)
         MERGE (cs)-[:HAS_CONDITION]->(c)
         WITH p,c,cs,row
         WHERE row.STOP IS NOT NULL and row.STOP <> ''
-        MERGE (ce:Encounter {id:row.ENCOUNTER, date:datetime(row.STOP)})
-        SET ce.code=row.CODE, ce.isEnd=true
-        MERGE (p)-[:HAS_ENCOUNTER]->(ce)
-        MERGE (ce)-[:HAS_CONDITION]->(c)
+        MERGE (ce:EncounterEnd {id:row.ENCOUNTER})
+          SET ce.date=datetime(row.STOP), ce.code=row.CODE, ce.isEnd=true
         MERGE (cs)-[:HAS_END]->(ce)
 
     Medications:
@@ -165,19 +170,17 @@ loading_queries:
         MERGE (p:Patient {id:row.PATIENT})
         MERGE (d:Drug {code:row.CODE})
         SET d.description=row.DESCRIPTION
-        MERGE (ps:Encounter {id:row.ENCOUNTER, isEnd: false})
+        MERGE (ps:Encounter {id:row.ENCOUNTER})
         ON CREATE
-          SET ps.code=row.CODE, ps.date=datetime(row.START)
+          SET ps.code=row.CODE, ps.date=datetime(row.START), ps.class='assertfalse'
         ON MATCH
           SET ps.code=row.CODE
         MERGE (p)-[:HAS_ENCOUNTER]->(ps)
         MERGE (ps)-[:HAS_DRUG]->(d)
         WITH p,d,ps,row
         WHERE row.STOP IS NOT NULL and row.STOP <> ''
-        CREATE (pe:Encounter {id:row.ENCOUNTER, date:datetime(row.STOP)})
-        SET pe.code=row.CODE, pe.isEnd=true
-        MERGE (p)-[:HAS_ENCOUNTER]->(pe)
-        MERGE (pe)-[:HAS_DRUG]->(d)
+        MERGE (pe:EncounterEnd {id:row.ENCOUNTER})
+          SET pe.date=datetime(row.STOP), pe.code=row.CODE, pe.isEnd=true
         MERGE (ps)-[:HAS_END]->(pe)
 
     Procedures:
@@ -188,9 +191,9 @@ loading_queries:
         MERGE (p:Patient {id:row.PATIENT})
         MERGE (r:Procedure {code:row.CODE})
         SET r.description=row.DESCRIPTION
-        MERGE (pe:Encounter {id:row.ENCOUNTER, isEnd: false})
+        MERGE (pe:Encounter {id:row.ENCOUNTER})
         ON CREATE
-          SET pe.date=datetime(row.START), pe.code=row.CODE
+          SET pe.date=datetime(row.START), pe.code=row.CODE, pe.class='assertfalse'
         ON MATCH
           SET pe.code=row.CODE
         MERGE (p)-[:HAS_ENCOUNTER]->(pe)
@@ -206,8 +209,8 @@ loading_queries:
         WITH row, row.CODE as code, CASE row.TYPE WHEN 'text' THEN row.VALUE ELSE toFloat(row.VALUE) END as value
         WITH row, apoc.map.fromPairs([[code, value]]) as attr
         MATCH (p:Patient {id:row.PATIENT})
-        MATCH (oe:Encounter {id:row.ENCOUNTER, isEnd: false})
-        MERGE (oe) -[:HAS_OBSERVATION]-> (o:Observation )
+        MATCH (oe:Encounter {id:row.ENCOUNTER})
+        MERGE (oe)-[:HAS_OBSERVATION]->(o:Observation)
         SET o += attr
 
     CarePlans:
@@ -220,22 +223,19 @@ loading_queries:
         MATCH (p:Patient {id:row.PATIENT})
         MERGE (c:CarePlan {code:row.CODE})
         SET c.description=row.DESCRIPTION
-        MERGE (cs:Encounter {id:row.ENCOUNTER, isEnd: false})
+        MERGE (cs:Encounter {id:row.ENCOUNTER})
         ON CREATE
-          SET cs.code=row.CODE, cs.date=datetime(row.START)
+          SET cs.code=row.CODE, cs.date=datetime(row.START), cs.class='assertfalse'
         ON MATCH
           SET cs.code=row.CODE
         MERGE (p)-[:HAS_ENCOUNTER]->(cs)
         MERGE (cs)-[:HAS_CARE_PLAN]->(c)
         WITH p,c,cs,row
         WHERE row.STOP IS NOT NULL and row.STOP <> ''
-        CREATE (ce:Encounter {id:row.ENCOUNTER, date:datetime(row.STOP)})
-        SET ce.code=row.CODE, ce.isEnd=true
-        MERGE (p)-[:HAS_ENCOUNTER]->(ce)
-        MERGE (ce)-[:HAS_CARE_PLAN]->(c)
+        MERGE (ce:EncounterEnd {id:row.ENCOUNTER})
+        SET ce.date=datetime(row.STOP), ce.code=row.CODE, ce.isEnd=true
         MERGE (cs)-[:HAS_END]->(ce)
 
-    # todo merge orgo instead
     Organizations:
       # skip: true
       file: organizations.csv
