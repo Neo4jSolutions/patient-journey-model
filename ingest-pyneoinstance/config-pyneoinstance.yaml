@@ -137,7 +137,7 @@ loading_queries:
         MERGE (as)-[:HAS_ALLERGY]->(a)
         WITH p,a,as,row
         WHERE row.STOP IS NOT NULL and row.STOP <> ''
-        MERGE (ae:Encounter {id:row.ENCOUNTER})
+        MERGE (ae:EncounterEnd {id:row.ENCOUNTER})
           SET ae.date=datetime(row.STOP), ae.code=row.CODE, ae.isEnd=true
         MERGE (as)-[:HAS_END]->(ae)
 

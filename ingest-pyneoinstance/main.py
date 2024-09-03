@@ -12,7 +12,7 @@ from pyneoinstance.fileload import load_yaml_file
 
 BATCH_SIZE = 1000
 DEFAULT_WORKERS = 1
-POST_INGEST_WAIT = 60
+POST_INGEST_WAIT = 10
 
 
 def main():
