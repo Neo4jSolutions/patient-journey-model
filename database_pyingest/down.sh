@@ -1,0 +1,2 @@
+export NEO4J_DOCKER_IMAGE=neo4j:enterprise
+docker compose down

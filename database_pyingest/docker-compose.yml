@@ -1,0 +1,49 @@
+services:
+  neo4j_patient_journey:
+    image: ${NEO4J_DOCKER_IMAGE}
+
+    # # Hostname
+    # hostname: server1
+
+    # user: ${USER_ID}:${GROUP_ID}
+    user: root
+    
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+
+    volumes:
+      # - ./neo4j.conf:/conf/neo4j.conf # This is the main configuration file
+      - ./neo4j/data:/var/lib/neo4j/data
+      - ./neo4j/logs:/var/lib/neo4j/logs
+      # - ./neo4j/conf:/var/lib/neo4j/conf
+      - ./neo4j/import:/var/lib/neo4j/import
+      - ./neo4j/backups:/var/lib/neo4j/backups
+      # - ./neo4j/plugins:/var/lib/neo4j/plugins
+      #- ./neo4j/metrics/server1:/var/lib/neo4j/metrics
+      #- ./neo4j/licenses/server1:/var/lib/neo4j/licenses
+      #- ./neo4j/ssl/server1:/var/lib/neo4j/ssl
+
+    # Passes the following environment variables to the container
+    environment:
+      - NEO4J_ACCEPT_LICENSE_AGREEMENT
+      - NEO4J_AUTH
+      - EXTENDED_CONF
+      - NEO4J_EDITION
+      - NEO4J_apoc_export_file_enabled=true
+      - NEO4J_apoc_import_file_enabled=true
+      - NEO4J_apoc_import_file_use__neo4j__config=true
+      # - NEO4J_PLUGINS=["graph-data-science"]
+      - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_dbms_usage__report_enabled=false
+
+    # Simple check testing whether the port 7474 is opened.
+    # If so, the instance running inside the container is considered as "healthy".
+    # This status can be checked using the "docker ps" command.
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider localhost:7474 || exit 1"]
+
+    # for interactive mode
+    # stdin_open: true 
+    # tty: true
+    # command: ["bash", "-c", "/bin/bash"]
