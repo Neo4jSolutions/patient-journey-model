@@ -2,10 +2,18 @@ server_uri: neo4j://localhost:7687/
 admin_user: neo4j
 admin_pass: neo4j123
 
-database: synthea100v2
+database: synthea100
 data_directory: /Users/henrylin/dev/patient-journey-model/import/synthea100
-# database: synthea100kv6
-# data_directory: /Users/henrylin/dev/patient-journey-model/import/synthea100k
+data_version: v2
+
+# database: synthea1k
+# data_directory: /Users/henrylin/dev/patient-journey-model/import/synthea1k
+# data_version: v2
+
+# database: coherent20221107
+# data_directory: /Users/henrylin/dev/patient-journey-model/import/coherent20221107/csv
+# data_version: v1
+
 
 # add unique constraint
 pre_ingest:
@@ -113,12 +121,18 @@ loading_queries:
     PayerTransitionRels:
       # skip: true
       file: payer_transitions.csv
-      query: |
+      query_v2: |
         WITH $rows as rows UNWIND rows as row
         MATCH (p:Patient {id:row.PATIENT})
         MATCH (payer:Payer {id:row.PAYER})
         MERGE (p)-[s:INSURANCE_START {year:datetime(row.START_DATE)}]->(payer)
         MERGE (p)-[e:INSURANCE_END {year:datetime(row.END_DATE)}]->(payer)
+      query_v1: |
+        WITH $rows as rows UNWIND rows as row
+        MATCH (p:Patient {id:row.PATIENT})
+        MATCH (payer:Payer {id:row.PAYER})
+        MERGE (p)-[s:INSURANCE_START {year:toInteger(row.START_YEAR)}]->(payer)
+        MERGE (p)-[e:INSURANCE_END {year:toInteger(row.END_YEAR)}]->(payer)
 
     Allergies:
       # skip: true

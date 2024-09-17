@@ -22,11 +22,13 @@ def main():
 
     data_directory = cf["data_directory"]
     dbname = cf["database"]
+    data_version = cf["data_version"]
 
     print_(f"server_uri = {cf['server_uri']}")
     print_(f"admin_user = {cf['admin_user']}")
     print_(f"admin_pass = {cf['admin_pass']}")
     print_(f"database = {dbname}")
+    print(f"data_version = {data_version}")
     print_(f"Import directory = {data_directory}")
     input("\nContinue? ")
 
@@ -66,10 +68,16 @@ def main():
             partitions = get_partition(data)
             print_(f"   {partitions} partitions")
             print_("   Running ingest query...")
+
+            if v["file"] in {"payer_transitions.csv"}:
+                query = v[f"query_{data_version}"]
+            else:
+                query = v["query"]
+
             graph.execute_write_query_with_data(
                 database=dbname,
                 data=data,
-                query=v["query"],
+                query=query,
                 partitions=partitions,
                 parallel=True,
                 workers=v.get("workers", DEFAULT_WORKERS),
