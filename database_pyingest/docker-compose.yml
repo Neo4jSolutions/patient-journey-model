@@ -13,10 +13,9 @@ services:
       - "7687:7687"
 
     volumes:
-      # - ./neo4j.conf:/conf/neo4j.conf # This is the main configuration file
       - ./neo4j/data:/var/lib/neo4j/data
       - ./neo4j/logs:/var/lib/neo4j/logs
-      # - ./neo4j/conf:/var/lib/neo4j/conf
+      - ./neo4j/conf:/var/lib/neo4j/conf
       - ./neo4j/import:/var/lib/neo4j/import
       - ./neo4j/backups:/var/lib/neo4j/backups
       # - ./neo4j/plugins:/var/lib/neo4j/plugins
